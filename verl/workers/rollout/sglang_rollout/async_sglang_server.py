@@ -152,8 +152,22 @@ class SGLangHttpServer:
             "mm_attention_backend": "fa3",
             "attention_backend": attention_backend if attention_backend is not None else "fa3",
             "skip_tokenizer_init": self.config.skip_tokenizer_init,
+            "skip_server_warmup": True,
             **engine_kwargs,
         }
+
+        if self.config.prometheus.enable:
+            if self.config.prometheus.served_model_name:
+                # Extract model name from path if it's a full path
+                served_model_name = self.config.prometheus.served_model_name
+                if "/" in served_model_name:
+                    # If it's a full path, extract the last part as model name
+                    served_model_name = served_model_name.split("/")[-1]
+                args["served_model_name"] = served_model_name
+
+            # start sglang metrics
+            args["enable_metrics"] = True
+
         # enable_weights_cpu_backup is supported in sglang>=0.5.3
         if "enable_weights_cpu_backup" in [f.name for f in dataclasses.fields(ServerArgs)]:
             enable_weights_cpu_backup = True if self.rollout_mode == RolloutMode.COLOCATED else False
@@ -164,7 +178,7 @@ class SGLangHttpServer:
         sglang.srt.entrypoints.engine._set_envs_and_config = _set_envs_and_config
         os.environ["SGLANG_BLOCK_NONZERO_RANK_CHILDREN"] = "0"
         server_args = ServerArgs(**args)
-        self.tokenizer_manager, self.template_manager, self.scheduler_info = _launch_subprocesses(
+        self.tokenizer_manager, self.template_manager, self.scheduler_info, *_ = _launch_subprocesses(
             server_args=server_args
         )
 
@@ -180,6 +194,21 @@ class SGLangHttpServer:
             )
         )
         app.is_single_tokenizer_mode = True
+
+        # Set warmup_thread_args to avoid AttributeError in lifespan function
+        app.warmup_thread_args = (
+            server_args,
+            None,
+            None,
+        )
+
+        # Manually add Prometheus middleware before starting server
+        # This ensures /metrics endpoint is available immediately
+        if server_args.enable_metrics:
+            from sglang.srt.utils.common import add_prometheus_middleware
+
+            add_prometheus_middleware(app)
+
         self._server_port, self._server_task = await run_unvicorn(app, server_args, self._server_address)
         self.tokenizer_manager.server_status = ServerStatus.Up
 
@@ -189,7 +218,6 @@ class SGLangHttpServer:
             await asyncio.gather(*[worker.wake_up.remote() for worker in self.workers])
         elif self.rollout_mode == RolloutMode.COLOCATED:
             # Directly call engine to wake up without sync weights.
-            # FIXME(@wuxibin): sglang seems resume with random weights.
             obj = ResumeMemoryOccupationReqInput(tags=["kv_cache", "weights"])
             await self.tokenizer_manager.resume_memory_occupation(obj, None)
             await self.tokenizer_manager.flush_cache()
@@ -204,6 +232,10 @@ class SGLangHttpServer:
             await self.tokenizer_manager.release_memory_occupation(obj, None)
         elif self.rollout_mode == RolloutMode.STANDALONE:
             logger.info("skip sleep in standalone mode")
+
+    async def clear_kv_cache(self):
+        obj = ReleaseMemoryOccupationReqInput(tags=["kv_cache"])
+        await self.tokenizer_manager.release_memory_occupation(obj, None)
 
     async def generate(
         self,

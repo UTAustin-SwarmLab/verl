@@ -69,7 +69,7 @@ from verl.workers.config import FSDPEngineConfig, FSDPOptimizerConfig, HFModelCo
 from verl.workers.sharding_manager.fsdp_ulysses import FSDPUlyssesShardingManager
 
 from ..base import BaseEngine, EngineRegistry
-from ..utils import postprocess_batch_func, prepare_micro_batches
+from ..utils import enable_full_determinism, postprocess_batch_func, prepare_micro_batches
 from .utils import create_device_mesh, get_sharding_strategy
 
 logger = logging.getLogger(__file__)
@@ -115,6 +115,9 @@ class FSDPEngine(BaseEngine):
         self.use_remove_padding = self.model_config.use_remove_padding
 
         self._init_device_mesh()
+
+        if self.engine_config.full_determinism:
+            enable_full_determinism(seed=self.engine_config.seed)
 
         # set FSDP offload params
         self._is_offload_param = self.engine_config.param_offload
@@ -476,6 +479,14 @@ class FSDPEngine(BaseEngine):
         # note that the global_batch_size should include data on all the dp
         tu.assign_non_tensor(data, sp_size=self.ulysses_sequence_parallel_size)
 
+        # compute num_tokens in global batch for loss normalization
+        batch_num_tokens = data["loss_mask"].sum().to(get_device_id())
+        torch.distributed.all_reduce(
+            batch_num_tokens, op=torch.distributed.ReduceOp.SUM, group=self.get_data_parallel_group()
+        )
+        tu.assign_non_tensor(data, batch_num_tokens=batch_num_tokens.item())
+        tu.assign_non_tensor(data, dp_size=self.get_data_parallel_size())
+
         micro_batches, indices = prepare_micro_batches(
             data=data, dp_group=self.get_data_parallel_group(), same_micro_num_in_dp=True
         )
@@ -489,12 +500,6 @@ class FSDPEngine(BaseEngine):
                 loss, meta_info = self.forward_step(micro_batch, loss_function=loss_function, forward_only=forward_only)
 
                 if not forward_only:
-                    global_bsz = data["global_batch_size"]
-                    local_micro_bsz = micro_batch.batch_size[0]
-                    # metrics contain the output, loss is dummy
-                    loss_scale_factor = local_micro_bsz / (global_bsz / self.get_data_parallel_size())
-                    # scale loss
-                    loss = loss * loss_scale_factor
                     loss.backward()
 
             output_lst.append(meta_info)
@@ -548,7 +553,7 @@ class FSDPEngine(BaseEngine):
         lr = self.lr_scheduler.get_last_lr()[0]  # only return the first group
         return lr
 
-    def to(self, device: str, model: bool = True, optimizer: bool = True):
+    def to(self, device: str, model: bool = True, optimizer: bool = True, grad: bool = True):
         """
         Move FSDP model and/or optimizer to CPU or GPU with offload support.
         """
@@ -560,14 +565,14 @@ class FSDPEngine(BaseEngine):
 
         assert device in (device_name, "cpu")
         if device == device_name:
-            if not self.engine_config.param_offload:
+            if self.engine_config.param_offload:
                 if model:
                     load_fsdp_model_to_gpu(self.module)
                 if optimizer and self.optimizer is not None:
                     load_fsdp_optimizer(self.optimizer, device)
             gc.collect()
         elif device == "cpu":
-            if not self.engine_config.param_offload:
+            if self.engine_config.param_offload:
                 if model:
                     offload_fsdp_model_to_cpu(self.module)
                 if optimizer and self.optimizer is not None:
@@ -656,7 +661,7 @@ class FSDPEngine(BaseEngine):
                 (name, param.to(device, non_blocking=True).full_tensor() if isinstance(param, DTensor) else param)
                 for name, param in params.items()
             )
-        return per_tensor_param
+        return per_tensor_param, peft_config
 
 
 class EngineEvalModeCtx:
@@ -961,7 +966,7 @@ class FSDPEngineWithLMHead(FSDPEngine):
 
             output = {
                 "model_output": model_output,
-                "loss": loss,
+                "loss": loss.detach().item(),
                 "metrics": metrics,
             }
 
