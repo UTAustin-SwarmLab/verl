@@ -84,6 +84,11 @@ _ROLLOUT_REGISTRY = {
     ("sglang", "async"): "verl.workers.rollout.sglang_rollout.sglang_rollout.ServerAdapter",
 }
 
+# Register custom VSeek rollout so all Ray workers can resolve it
+_ROLLOUT_REGISTRY[("vseek_sglang", "sync")] = "vseek.agent.slgang_rollout.VSeekSGLangRollout"
+_ROLLOUT_REGISTRY[("vseek_sglang", "async")] = "vseek.agent.slgang_rollout.VSeekSGLangRollout"
+_ROLLOUT_REGISTRY[("vseek_sglang_tag", "sync")] = "vseek.agent.slgang_rollout.VSeekSGLangRolloutTag"
+_ROLLOUT_REGISTRY[("vseek_sglang_tag", "async")] = "vseek.agent.slgang_rollout.VSeekSGLangRolloutTag"
 
 def get_rollout_class(rollout_name: str, mode: str) -> type[BaseRollout]:
     """Get the rollout class by name.

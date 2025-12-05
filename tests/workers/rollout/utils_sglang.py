@@ -88,7 +88,7 @@ def clean_torchelastic_env():
 def load_tokenizer_and_model(local_model_path, dtype="bfloat16"):
     tokenizer = AutoTokenizer.from_pretrained(local_model_path, padding_side="left")
     tokenizer.pad_token = tokenizer.eos_token
-    model = AutoModelForCausalLM.from_pretrained(local_model_path, torch_dtype=getattr(torch, dtype), device_map="cuda")
+    model = AutoModelForCausalLM.from_pretrained(local_model_path, torch_dtype=getattr(torch, dtype), device_map="cuda", trust_remote_code=True)
     return tokenizer, model
 
 

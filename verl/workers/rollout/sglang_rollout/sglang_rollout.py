@@ -245,7 +245,7 @@ def get_tool_call_parser_type(
                 tokenizer_vocab = processing_class.tokenizer.get_vocab()
             except AttributeError as e:
                 raise ValueError(f"Cannot get vocab from processing_class {processing_class}") from e
-
+    
         if parser.bot_token.strip() in tokenizer_vocab and (
             parser.eot_token == "" or parser.eot_token.strip() in tokenizer_vocab
         ):
@@ -536,6 +536,7 @@ class SGLangRollout(BaseRollout):
         tool_schemas = [tool.get_openai_tool_schema().model_dump() for tool in tool_list]
         tool_map = {tool.name: tool for tool in tool_list}
         tool_call_parser_type = get_tool_call_parser_type(processing_class)
+
         sgl_tools = [Tool.model_validate(tool_schema) for tool_schema in tool_schemas]
         function_call_parser = FunctionCallParser(
             sgl_tools,
@@ -589,6 +590,7 @@ class SGLangRollout(BaseRollout):
             response_mask: | 1, 1, 1, ..., 1, 1 | 0, 0, .., 0, 0 | 1, 1, 1, ..., 1, 1 | 0, 0, ..., 0|
         """
         if self.config.multi_turn.enable:
+            logger.info("calling req_level_generate_sequences")
             return self._req_level_generate_sequences(prompts, **kwargs)
         return self._batch_level_generate_sequences(prompts, **kwargs)
 
@@ -882,12 +884,15 @@ class SGLangRollout(BaseRollout):
                 # Only continue the conversation if the prompt length is not greater than max_model_len - 1,
                 # since SGLang raises an error when max_new_tokens + 1 is greater to max_model_len (the extra
                 # token accounts for the EOS token).
+       
+                # TEST: Remove Later
+                
+                
                 prompt_length = len(_req.get_generation_prompt_ids(self.processing_class))
-
                 if prompt_length + 1 >= self.config.max_model_len:
                     finish_reason_type = FinishReasonTypeEnum.LENGTH
                     break
-
+                
                 # Video support is not implemented yet
                 image_data = (
                     _req.multi_modal_data["image"]
@@ -903,7 +908,7 @@ class SGLangRollout(BaseRollout):
                     logger.warning(
                         "video support is not implemented yet, current length of video data is %d", len(video_data)
                     )
-
+           
                 output = await self._handle_engine_call(_req, request_sampling_params, image_data=image_data)
                 if self.config.skip_tokenizer_init:
                     content_ids = output["output_ids"]
@@ -914,16 +919,18 @@ class SGLangRollout(BaseRollout):
                 else:
                     content_ids = None
                     content = output["text"]
-
+                
                 finish_reason_type = FinishReasonTypeEnum.from_str(output["meta_info"]["finish_reason"]["type"])
                 current_turns += 1
                 if finish_reason_type == FinishReasonTypeEnum.LENGTH:
                     _req.add_assistant_message(self.processing_class, content=content, content_ids=content_ids)
                     break
                 else:
+
                     if self._function_call_parser and self._function_call_parser.has_tool_call(content):
                         finish_reason_type = FinishReasonTypeEnum.TOOL_CALL
                         _req.state = AsyncRolloutRequestStateEnum.TOOL_CALLING
+                        
                         try:
                             normed_content, tool_calls = self._function_call_parser.parse_non_stream(content)
                         except JSONDecodeError:
@@ -1176,7 +1183,7 @@ class SGLangRollout(BaseRollout):
             sorted_output_req_list = sorted(output_req_list, key=lambda x: (x.batch_data_id, x.rollout_offset))
         else:
             sorted_output_req_list = None
-
+    
         dist.barrier()
         [sorted_output_req_list] = broadcast_pyobj(
             data=[sorted_output_req_list],
@@ -1316,7 +1323,6 @@ class SGLangRollout(BaseRollout):
         input_ids = torch.cat((prompt_ids, response_ids), dim=-1)
         attention_mask = torch.cat((prompt_attention_mask, response_attention_mask), dim=-1)
         position_ids = torch.cat((prompt_position_ids, response_position_ids), dim=-1)
-
         # Construct the batch data
         batch = TensorDict(
             {

@@ -19,7 +19,7 @@ Single Process Actor
 
 import logging
 import os
-
+import tqdm
 import torch
 from torch import nn
 from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
@@ -335,6 +335,7 @@ class DataParallelPPOActor(BasePPOActor):
         for micro_batch in micro_batches:
             micro_batch = micro_batch.to(get_device_id())
             model_inputs = {**micro_batch.batch, **micro_batch.non_tensor_batch}
+            print("model_inputs['position_ids'].shape", model_inputs["position_ids"].shape)
             with torch.no_grad():
                 entropy, log_probs = self._forward_micro_batch(
                     model_inputs, temperature=temperature, calculate_entropy=calculate_entropy
@@ -403,7 +404,8 @@ class DataParallelPPOActor(BasePPOActor):
 
                 self.actor_optimizer.zero_grad()
 
-                for micro_batch in micro_batches:
+                for micro_batch_idx, micro_batch in enumerate(micro_batches):
+                    print(f"micro_batch_idx : {micro_batch_idx} : size {micro_batch.batch['input_ids'].shape}")
                     micro_batch = micro_batch.to(get_device_id())
                     micro_batch_metrics = {}
                     model_inputs = {**micro_batch.batch, **micro_batch.non_tensor_batch}

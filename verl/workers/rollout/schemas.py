@@ -234,6 +234,7 @@ class AsyncRolloutRequest(BaseModel):
         raw_prompt = processing_class.apply_chat_template(
             messages, tools=tools, add_generation_prompt=add_generation_prompt, tokenize=False
         )
+        #print("*****************\nRaww_prompt: {}\n**************".format(raw_prompt))
         if not tokenize:
             return raw_prompt
 
@@ -292,7 +293,12 @@ class AsyncRolloutRequest(BaseModel):
                 second_per_grid_ts=second_per_grid_ts,
                 attention_mask=attention_mask.squeeze(0),
             )
-            return new_position_ids  # (3, seq_len)
+            # Concatenate text 1D position ids with 3D vision position ids -> (4, seq_len)
+            valid_mask = attention_mask.squeeze(0).bool()
+            text_position_ids = torch.ones((1, input_ids.shape[-1]), dtype=torch.long, device=input_ids.device)
+            text_position_ids[0, valid_mask] = torch.arange(valid_mask.sum().item(), device=input_ids.device)
+            position_ids = torch.cat((text_position_ids, new_position_ids.to(text_position_ids.device)), dim=0)
+            return position_ids  # (4, seq_len)
         else:
             return compute_position_id_with_mask(attention_mask)  # (1, seq_len)
 
@@ -515,8 +521,12 @@ class AsyncRolloutRequest(BaseModel):
         """
         full_prompt_ids = full_prompt_ids.squeeze(0)
         current_prompt_ids = current_prompt_ids.squeeze(0)
-        full_prompt = processing_class.decode(full_prompt_ids, skip_special_tokens=False)
-        current_prompt = processing_class.decode(current_prompt_ids, skip_special_tokens=False)
+        try:
+            tokenizer = processing_class.tokenizer
+        except AttributeError:
+            tokenizer = processing_class
+        full_prompt = tokenizer.decode(full_prompt_ids, skip_special_tokens=False)
+        current_prompt = tokenizer.decode(current_prompt_ids, skip_special_tokens=False)
         s = difflib.SequenceMatcher(None, full_prompt, current_prompt, autojunk=False)
         diffs = []
         for tag, i1, i2, j1, j2 in s.get_opcodes():
