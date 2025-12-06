@@ -491,17 +491,10 @@ class AgentLoopWorkerBase:
             # Handle multi-modal inputs and position_ids calculation
             # Only support Qwen2VLImageProcessor for multi-modal processing currently
             # TODO: support other multi-modal inputs
-            multi_modal_inputs = None
-            if (
-                self.processor is not None
-                and "Qwen2VLImageProcessor" in self.processor.image_processor.__class__.__name__
-                or "Qwen3VLProcessor" in self.processor.__class__.__name__
-            ):
-                    # Add this check for Qwen3VL  
-                if "Qwen3VLProcessor" in self.processor.__class__.__name__:  
-                    from verl.models.transformers.qwen3_vl import get_rope_index  
-                else:  
-                    from verl.models.transformers.qwen2_vl import get_rope_index
+        response_mask = response_mask_output["input_ids"] * response_output["attention_mask"]
+        attention_mask = torch.cat([prompt_output["attention_mask"], response_output["attention_mask"]], dim=1)
+        input_ids = torch.cat([prompt_output["input_ids"], response_output["input_ids"]], dim=1)
+
 
         routed_experts = None
         if output.routed_experts is not None:
@@ -536,8 +529,16 @@ class AgentLoopWorkerBase:
             # We must use dict(multi_modal_inputs) to convert BatchFeature values to a new dict
             # because np.array() only keeps the keys for BatchFeature.
             multi_modal_inputs = dict(multi_modal_inputs.convert_to_tensors("pt"))
-        if self.processor is not None and "Qwen2VLImageProcessor" in self.processor.image_processor.__class__.__name__:
-            from verl.models.transformers.qwen2_vl import get_rope_index
+        if (
+            self.processor is not None
+            and "Qwen2VLImageProcessor" in self.processor.image_processor.__class__.__name__
+            or "Qwen3VLProcessor" in self.processor.__class__.__name__
+        ):
+                # Add this check for Qwen3VL  
+            if "Qwen3VLProcessor" in self.processor.__class__.__name__:  
+                from verl.models.transformers.qwen3_vl import get_rope_index  
+            else:  
+                from verl.models.transformers.qwen2_vl import get_rope_index
 
             image_grid_thw = multi_modal_inputs.get("image_grid_thw")
             video_grid_thw = multi_modal_inputs.get("video_grid_thw")
