@@ -35,7 +35,8 @@ from vllm.inputs import TokensPrompt
 from vllm.lora.request import LoRARequest
 from vllm.outputs import RequestOutput
 from vllm.usage.usage_lib import UsageContext
-from vllm.utils import FlexibleArgumentParser, get_tcp_uri
+from verl.utils.vllm.utils import FlexibleArgumentParser, get_tcp_uri
+# from vllm.utils import FlexibleArgumentParser, get_tcp_uri
 from vllm.v1.engine.async_llm import AsyncLLM
 from vllm.v1.engine.core import EngineCoreProc
 from vllm.v1.engine.utils import CoreEngineProcManager
@@ -350,7 +351,7 @@ class vLLMHttpServerBase:
         engine_client = AsyncLLM.from_vllm_config(
             vllm_config=vllm_config,
             usage_context=usage_context,
-            disable_log_requests=engine_args.disable_log_requests,
+            #disable_log_requests=engine_args.disable_log_requests,
             disable_log_stats=engine_args.disable_log_stats,
         )
 
