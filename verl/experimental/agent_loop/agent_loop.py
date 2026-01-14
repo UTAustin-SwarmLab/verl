@@ -463,8 +463,13 @@ class AgentLoopWorkerBase:
             if (
                 self.processor is not None
                 and "Qwen2VLImageProcessor" in self.processor.image_processor.__class__.__name__
+                or "Qwen3VLProcessor" in self.processor.__class__.__name__
             ):
-                from verl.models.transformers.qwen2_vl import get_rope_index
+                    # Add this check for Qwen3VL  
+                if "Qwen3VLProcessor" in self.processor.__class__.__name__:  
+                    from verl.models.transformers.qwen3_vl import get_rope_index  
+                else:  
+                    from verl.models.transformers.qwen2_vl import get_rope_index
 
                 images = getattr(output, "multi_modal_data", {}).get("image", None)
                 current_text = self.tokenizer.decode(input_ids.squeeze(0), skip_special_tokens=True)

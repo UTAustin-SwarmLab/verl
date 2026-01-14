@@ -441,6 +441,15 @@ class RLHFDataset(Dataset):
         # add index for each prompt
         if "extra_info" not in row_dict or row_dict["extra_info"] is None:
             row_dict["extra_info"] = dict()
+        
+        if isinstance(row_dict["extra_info"], str):
+            try:
+                import json
+                row_dict["extra_info"] = json.loads(row_dict["extra_info"])
+            except Exception as e:
+                print(f"Warning: Failed to parse extra_info JSON for index {item}: {e}")
+                row_dict["extra_info"] = dict()
+                
         index = row_dict.get("extra_info", {}).get("index", 0)
         tools_kwargs = row_dict.get("extra_info", {}).get("tools_kwargs", {})
         interaction_kwargs = row_dict.get("extra_info", {}).get("interaction_kwargs", {})
