@@ -359,7 +359,9 @@ class AgentLoopWorkerBase:
         tasks = []
         for i in range(len(batch)):
             kwargs = {k: v[i] for k, v in batch.non_tensor_batch.items()}
+            # delete the tools_kwargs from the kwargs and batch
             tasks.append(asyncio.create_task(self._run_agent_loop(sampling_params, trajectory_info[i], **kwargs)))
+        batch.non_tensor_batch.pop("tools_kwargs", None)
         outputs = await asyncio.gather(*tasks)
 
         output = self._postprocess(outputs)
@@ -520,6 +522,8 @@ class AgentLoopWorkerBase:
                     "__num_turns__": np.array([output.num_turns]),
                     "tool_extra_fields": np.array([output.extra_fields], dtype=object),
                 }
+                # Remove the tools_kwargs from the extra_fields
+                non_tensor_batch.pop("tools_kwargs", None)
 
                 data = DataProto(
                     batch=batch,
