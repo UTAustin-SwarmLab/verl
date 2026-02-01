@@ -84,8 +84,11 @@ class NaiveRewardManager(AbstractRewardManager):
             num_turns = data_item.non_tensor_batch.get("__num_turns__", None)
             rollout_reward_scores = data_item.non_tensor_batch.get("reward_scores", {})
             tool_extra_fields = data_item.non_tensor_batch.get("tool_extra_fields", {})
-            if tool_extra_fields:
+            
+            print(f"tool_extra_fields: {tool_extra_fields}")
+            if tool_extra_fields is not None:
                 extra_info.update(tool_extra_fields.items())
+                
             extra_info["num_turns"] = num_turns
             extra_info["rollout_reward_scores"] = rollout_reward_scores
             extra_info["num_examine"] = self.num_examine
