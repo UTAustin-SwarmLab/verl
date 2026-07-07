@@ -179,7 +179,7 @@ class ToolAgentLoop(AgentLoopBase):
             else None,
             num_turns=agent_data.user_turns + agent_data.assistant_turns + 1,
             metrics=agent_data.metrics,
-            extra_fields={},
+            extra_fields=dict(agent_data.extra_fields),
         )
         output.extra_fields.update({"turn_scores": agent_data.turn_scores, "tool_rewards": agent_data.tool_rewards})
         return output
