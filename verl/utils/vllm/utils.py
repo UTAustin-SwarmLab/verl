@@ -75,6 +75,11 @@ class VLLMHijack:
                 if hasattr(model, "hf_to_vllm_mapper") and model.hf_to_vllm_mapper is not None:
                     hf_to_vllm_mapper = model.hf_to_vllm_mapper
 
+                if hasattr(self.lora_config, "lora_extra_vocab_size"):  
+                    target_embedding_padding = self.vocab_size + self.lora_config.lora_extra_vocab_size
+                else:
+                    target_embedding_padding = self.vocab_size
+
                 if isinstance(lora_request, TensorLoRARequest):
                     lora = self._lora_model_cls.from_lora_tensors(
                         lora_model_id=lora_request.lora_int_id,
@@ -83,7 +88,7 @@ class VLLMHijack:
                         device="cpu",
                         dtype=self.lora_config.lora_dtype,
                         embeddings=None,
-                        target_embedding_padding=self.vocab_size + self.lora_config.lora_extra_vocab_size,
+                        target_embedding_padding=target_embedding_padding,
                         embedding_modules=self.embedding_modules,
                         embedding_padding_modules=self.embedding_padding_modules,
                         weights_mapper=hf_to_vllm_mapper,
@@ -96,7 +101,7 @@ class VLLMHijack:
                         lora_model_id=lora_request.lora_int_id,
                         device="cpu",
                         dtype=self.lora_config.lora_dtype,
-                        target_embedding_padding=self.vocab_size + self.lora_config.lora_extra_vocab_size,
+                        target_embedding_padding=target_embedding_padding,
                         embedding_modules=self.embedding_modules,
                         embedding_padding_modules=self.embedding_padding_modules,
                         weights_mapper=hf_to_vllm_mapper,
