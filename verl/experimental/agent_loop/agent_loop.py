@@ -528,6 +528,7 @@ class AgentLoopWorkerBase:
                 data = DataProto(
                     batch=batch,
                     non_tensor_batch=non_tensor_batch,
+                    meta_info={"validate": trajectory.get("validate", False)},
                 )
                 result = await self.reward_manager_worker.compute_score.remote(data)
                 output.reward_score = result["reward_score"]

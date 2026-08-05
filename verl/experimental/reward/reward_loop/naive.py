@@ -45,6 +45,8 @@ class NaiveRewardLoopManager(RewardLoopManagerBase):
         tool_extra_fields = data_item.non_tensor_batch.get("tool_extra_fields", None)
         if tool_extra_fields is not None:
             extra_info.update(tool_extra_fields.items())
+        # Let compute_score force EM on validation even when train reward_type is puls.
+        extra_info["validate"] = bool(data.meta_info.get("validate", False))
 
         response_str = await self.loop.run_in_executor(
             None, lambda: self.tokenizer.decode(valid_response_ids, skip_special_tokens=True)

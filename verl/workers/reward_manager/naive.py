@@ -46,8 +46,10 @@ class NaiveRewardManager(AbstractRewardManager):
     def __call__(self, data: DataProto, return_dict: bool = False) -> torch.Tensor | dict[str, Any]:
         """We will expand this function gradually based on the available datasets"""
 
-        # If there is rm score, we directly return rm score. Otherwise, we compute via rm_score_fn
-        if "rm_scores" in data.batch.keys():
+        # Async agent-loop scoring stores train-style rewards in rm_scores. For validation
+        # (num_examine > 0) recompute instead of short-circuiting, so val can force EM.
+        is_validation = self.num_examine > 0 or data.meta_info.get("validate", False)
+        if "rm_scores" in data.batch.keys() and not is_validation:
             if return_dict:
                 reward_extra_keys = data.meta_info.get("reward_extra_keys", [])
                 reward_extra_info = {key: data.non_tensor_batch[key] for key in reward_extra_keys}
@@ -92,6 +94,7 @@ class NaiveRewardManager(AbstractRewardManager):
             extra_info["num_turns"] = num_turns
             extra_info["rollout_reward_scores"] = rollout_reward_scores
             extra_info["num_examine"] = self.num_examine
+            extra_info["validate"] = is_validation
 
             score = self.compute_score(
                 data_source=data_source,
@@ -107,6 +110,7 @@ class NaiveRewardManager(AbstractRewardManager):
                     reward_extra_info[key].append(value)
             else:
                 reward = score
+                reward_extra_info["acc"].append(reward)
 
             reward_tensor[i, valid_response_length - 1] = reward
 
